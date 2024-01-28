@@ -1,10 +1,13 @@
 use std::collections::HashMap;
 use std::fs;
+use std::io::Bytes;
+use std::iter::Peekable;
 use std::str::Chars;
+use std::vec::IntoIter;
 
 /// This is a bencode-parser
 pub struct BencodeParser {
-    pub encoded_bc_source: String,
+    pub encoded_bc_source: Box<Peekable<IntoIter<char>>>,
     pub decoded_bc: BenStruct
 }
 
@@ -38,7 +41,7 @@ impl PartialEq for BenStruct {
                     number == data
                 } else { panic!("Comparing invalid BenStructs") }
              }
-            _ => false
+            _ => todo!("Not implemented yet, use an iter")
         }
     }
 }
@@ -54,41 +57,84 @@ impl BencodeParser {
     pub fn new_w_file(filepath: &str) -> BencodeParser {
         let ben_source = fs::read_to_string(filepath)
             .unwrap_or_else(|_| panic!("Couldn't read bencode from {filepath}"));
+        let bc = ben_source.chars();
 
         BencodeParser {
-            encoded_bc_source: ben_source.clone(),
+            encoded_bc_source: Box::new(
+                fs::read_to_string(filepath)
+                    .unwrap_or_else(
+                        |_| panic!("Couldn't read bencode from {filepath}")
+                    )
+                    .chars()
+                    .collect::<Vec<char>>()
+                    .into_iter()
+                    .peekable()
+            ),
             decoded_bc: BenStruct::Null
         }
     }
 
     pub fn new_w_string(bc: String) -> BencodeParser {
         BencodeParser {
-            encoded_bc_source: bc,
+            encoded_bc_source: Box::new(
+                bc
+                    .chars()
+                    .collect::<Vec<char>>()
+                    .into_iter()
+                    .peekable()
+            ),
             decoded_bc: BenStruct::Null
         }
+    }
+
+    fn advance(&mut self) -> Option<char> {
+        self.encoded_bc_source.next()
     }
 
     /// Runner element
     fn decode_bencode(&mut self) -> BenStruct {
         let mut delimeter_stack: Vec<char> = Vec::new();
-        for ch in self.encoded_bc_source.clone().chars() {
-            println!("{ch}");
+        while let Some(ch) = self.advance() {
             match ch {
+                K_INT => {
+                    delimeter_stack.push('$');
+                    self.decoded_bc = self.consume_int();
+                },
                 K_DICT => {
-                    delimeter_stack.push('{');
-                    self.decoded_bc = BenStruct::Dict {
-                        data: HashMap::new()
-                    }
-
+                    delimeter_stack.push('{')
                 },
+                K_LIST => {
+                    delimeter_stack.push('[')
+                }
                 K_END => {
-                    delimeter_stack.pop().expect("Invalid bencode!");
+                    delimeter_stack.pop().expect("Invalid bencode, excess closing delimiters!");
                 },
-                '\n' => continue,
+                '\n' | '\t' => continue,
                 _ => panic!("Unknown char")
             }
-        };
+        }
+        if !delimeter_stack.is_empty() {
+            panic!("Invalid bencode, delimiters unclosed!")
+        }
         self.decoded_bc.clone()
+    }
+
+    fn consume_while<F>(&mut self, test: F) -> String
+        where F: Fn(char) -> bool
+    {
+        let mut result = String::new();
+
+        while test(self.encoded_bc_source.peek().unwrap().to_owned()) {
+            result.push(self.encoded_bc_source.next().unwrap())
+        };
+
+        result
+    }
+
+    fn consume_int(&mut self) -> BenStruct {
+        let raw_int = self.consume_while(|char| char != 'e');
+        let num: isize = raw_int.parse().expect("Couldn't parse integer");
+        BenStruct::Int { data: num }
     }
 
     fn consume_dicts(&mut self) -> (String, BenStruct) {
@@ -104,10 +150,19 @@ mod tests {
     use super::*;
 
     #[test]
-    #[should_panic(expected = "Invalid bencode!")]
+    #[should_panic(expected = "Invalid bencode, delimiters unclosed!")]
+    fn invalid_bencode_w_stack_underflow_panics() {
+        let mut bc_parser = BencodeParser::new_w_string(
+            String::from("dddee")
+        );
+        bc_parser.decode_bencode();
+    }
+
+    #[test]
+    #[should_panic(expected = "Invalid bencode, excess closing delimiters!")]
     fn invalid_bencode_w_stack_overflow_panics() {
         let mut bc_parser = BencodeParser::new_w_string(
-            String::from("dee")
+            String::from("ddeee")
         );
         bc_parser.decode_bencode();
     }
@@ -173,6 +228,12 @@ mod tests {
         } else {
             panic!("Invalid data type decoded!")
         }
+    }
+
+    // Dicts
+    #[test]
+    fn should_parse_dicts() {
+        todo!()
     }
 
 }
