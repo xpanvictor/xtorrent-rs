@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::fs;
-use std::io::Bytes;
 use std::iter::Peekable;
 use std::str::Chars;
 use std::vec::IntoIter;
@@ -11,15 +10,11 @@ pub struct BencodeParser {
     pub decoded_bc: BenStruct
 }
 
-struct BenByte {
-    length: u128, data: Chars<'static>
-}
-
 /// Possible bencode phases
 #[derive(Debug, Clone)]
 enum BenStruct {
     Int { data: isize },
-    Byte { length: u128, data: Chars<'static> },
+    Byte { length: u128, data: String },
     List { data: Vec<BenStruct> },
     // Since the key will always be strings
     Dict { data: HashMap<String, Box<BenStruct>> },
@@ -92,7 +87,7 @@ impl BencodeParser {
     }
 
     /// Runner element
-    fn decode_bencode(&mut self) -> BenStruct {
+    pub fn decode_bencode(&mut self) -> BenStruct {
         let mut delimeter_stack: Vec<char> = Vec::new();
         while let Some(ch) = self.advance() {
             match ch {
@@ -109,6 +104,17 @@ impl BencodeParser {
                 K_END => {
                     delimeter_stack.pop().expect("Invalid bencode, excess closing delimiters!");
                 },
+                // For parsing bytes
+                number_delimiter if number_delimiter.is_ascii_digit() => {
+                    let remaining_len_chars = self.consume_while(
+                        &mut |char| char != ':'
+                    );
+                    let byte_len: u128 = format!("{number_delimiter}{remaining_len_chars}")
+                        .parse()
+                        .expect("Couldn't parse length of byte");
+                    self.decoded_bc = self.consume_bytes(byte_len);
+                    println!("{:#?}", self.decoded_bc);
+                },
                 '\n' | '\t' => continue,
                 _ => panic!("Unknown char")
             }
@@ -119,22 +125,40 @@ impl BencodeParser {
         self.decoded_bc.clone()
     }
 
-    fn consume_while<F>(&mut self, test: F) -> String
-        where F: Fn(char) -> bool
+    fn consume_while<F>(&mut self, test: &mut F) -> String
+        where F: FnMut(char) -> bool
     {
         let mut result = String::new();
 
-        while test(self.encoded_bc_source.peek().unwrap().to_owned()) {
-            result.push(self.encoded_bc_source.next().unwrap())
+        loop {
+            let x = self.encoded_bc_source.peek().to_owned();
+            if x.is_none() || !test(*x.unwrap()) {break}
+            result.push(self.encoded_bc_source.next().unwrap());
         };
 
         result
     }
 
     fn consume_int(&mut self) -> BenStruct {
-        let raw_int = self.consume_while(|char| char != 'e');
+        let raw_int = self.consume_while(
+            &mut |char| char != 'e'
+        );
         let num: isize = raw_int.parse().expect("Couldn't parse integer");
         BenStruct::Int { data: num }
+    }
+
+    fn consume_bytes(&mut self, byte_len: u128) -> BenStruct {
+        let mut counter: u128 = 0;
+        // assert!(byte_len > counter);
+        self.advance(); // to skip initial ':' char
+        let raw_bytes = self.consume_while(&mut |_| {
+            counter += 1;
+            counter < byte_len + 1
+        });
+        BenStruct::Byte {
+            length: byte_len,
+            data: raw_bytes
+        }
     }
 
     fn consume_dicts(&mut self) -> (String, BenStruct) {
@@ -196,13 +220,15 @@ mod tests {
     // Strings
     #[test]
     fn should_parse_byte() {
+        let raw_bytes = "31:debian-10.2.0-amd64-netinst.iso";
+        let expected_bytes = raw_bytes.split_once(':').unwrap().1;
         let mut bc_parser = BencodeParser::new_w_string(
-            String::from("4:spam")
+            String::from(raw_bytes)
         );
         let result = bc_parser.decode_bencode();
         if let BenStruct::Byte {length, data} = result {
-            assert_eq!(length as usize, data.clone().count(), "Length of chars not same as passed len");
-            assert_eq!(data.as_str(), "spam", "Wrong chars decoded")
+            assert_eq!(length as usize, data.clone().len(), "Length of chars not same as passed len");
+            assert_eq!(data.as_str(), expected_bytes, "Wrong chars decoded")
         } else {
             panic!("Invalid data type decoded!")
         }
@@ -217,7 +243,7 @@ mod tests {
         let result = bc_parser.decode_bencode();
         let expected_result = vec![
             BenStruct::Int {data: 42},
-            BenStruct::Byte {length: 4, data: "spam".chars()},
+            BenStruct::Byte {length: 4, data: "spam".to_string()},
             BenStruct::Int {data: -32}
         ];
         if let BenStruct::List {data} = result {
