@@ -12,7 +12,7 @@ pub struct BencodeParser {
 
 /// Possible bencode phases
 #[derive(Debug, Clone)]
-enum BenStruct {
+pub enum BenStruct {
     Int { data: isize },
     Byte { length: u128, data: String },
     List { data: Vec<BenStruct> },
@@ -88,41 +88,57 @@ impl BencodeParser {
 
     /// Runner element
     pub fn decode_bencode(&mut self) -> BenStruct {
-        let mut delimeter_stack: Vec<char> = Vec::new();
-        while let Some(ch) = self.advance() {
-            match ch {
-                K_INT => {
-                    delimeter_stack.push('$');
-                    self.decoded_bc = self.consume_int();
-                },
-                K_DICT => {
-                    delimeter_stack.push('{')
-                },
-                K_LIST => {
-                    delimeter_stack.push('[')
-                }
-                K_END => {
-                    delimeter_stack.pop().expect("Invalid bencode, excess closing delimiters!");
-                },
-                // For parsing bytes
-                number_delimiter if number_delimiter.is_ascii_digit() => {
-                    let remaining_len_chars = self.consume_while(
-                        &mut |char| char != ':'
-                    );
-                    let byte_len: u128 = format!("{number_delimiter}{remaining_len_chars}")
-                        .parse()
-                        .expect("Couldn't parse length of byte");
-                    self.decoded_bc = self.consume_bytes(byte_len);
-                    println!("{:#?}", self.decoded_bc);
-                },
-                '\n' | '\t' => continue,
-                _ => panic!("Unknown char")
-            }
-        }
-        if !delimeter_stack.is_empty() {
-            panic!("Invalid bencode, delimiters unclosed!")
-        }
+        self.decoded_bc = self.process_bencode();
         self.decoded_bc.clone()
+    }
+
+    fn process_bencode(&mut self) -> BenStruct {
+        let mut delimiter_stack: Vec<char> = Vec::new();
+        let tag = self.advance().unwrap();
+
+        let ben_struct_coded = match tag {
+            K_INT => {
+                delimiter_stack.push('$');
+                self.consume_int()
+            },
+            // For parsing bytes
+            number_delimiter if number_delimiter.is_ascii_digit() => {
+                let remaining_len_chars = self.consume_while(
+                    &mut |char| char != ':'
+                );
+                let byte_len: u128 = format!("{number_delimiter}{remaining_len_chars}")
+                    .parse()
+                    .expect("Couldn't parse length of byte");
+                self.consume_bytes(byte_len)
+            },
+            K_DICT => {
+                delimiter_stack.push('{');
+                BenStruct::Null
+            },
+            K_LIST => {
+                let mut base_vec = Vec::new();
+                let base_list = loop {
+                    if delimiter_stack.is_empty() {
+                        break BenStruct::List {
+                            data: base_vec
+                        }
+                    }
+
+                    base_vec.push(
+                        self.process_bencode()
+                    );
+                };
+
+                base_list
+            },
+            _ => self.consume_int()
+        };
+
+        if !delimiter_stack.is_empty() {
+            panic!("Invalid bencode, delimiters unclosed!")
+        };
+
+        ben_struct_coded
     }
 
     fn consume_while<F>(&mut self, test: &mut F) -> String
@@ -158,6 +174,15 @@ impl BencodeParser {
         BenStruct::Byte {
             length: byte_len,
             data: raw_bytes
+        }
+    }
+
+    fn consume_lists(&mut self) -> BenStruct {
+
+        BenStruct::List {
+            data: vec![
+
+            ]
         }
     }
 
