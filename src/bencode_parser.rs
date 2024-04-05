@@ -11,15 +11,7 @@ pub struct BencodeParser {
 }
 
 // logic
-// take each character,
-// determine action for character (decode)
-// if character locks in its mechanism,
-// consume next without decoder
-// ---- so how
-// a mechanism to decode each type
-// then the parent runner takes a char, sends to decoder which returns the type
-// looking at returning control to parent (mutex)
-// disadvantage though: nesting of controls for nested data might not be so good
+// recursive approach baby
 
 /// Possible bencode phases
 #[derive(Debug, Clone, Eq)]
@@ -215,7 +207,7 @@ impl BencodeParser {
     }
 
     fn check_end(&mut self) {
-        assert_eq!(self.advance().unwrap(), 'e')
+        assert_eq!(self.advance().unwrap(), K_END)
     }
 
     fn consume_int(&mut self) -> BenStruct {
@@ -247,7 +239,6 @@ impl BencodeParser {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::ops::Deref;
 
     #[test]
     #[ignore]
