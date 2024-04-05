@@ -58,6 +58,22 @@ impl PartialEq for BenStruct {
                     false
                 }
             }
+            BenStruct::List { data } => {
+                if let BenStruct::List {
+                    data: expected_list,
+                } = other
+                {
+                    let match_count = data
+                        .clone()
+                        .iter()
+                        .zip(expected_list.iter())
+                        .filter(|&(r, e)| r == e)
+                        .count();
+                    match_count == data.len()
+                } else {
+                    false
+                }
+            }
             _ => todo!("Not implemented yet, use an iter"),
         }
     }
@@ -100,12 +116,12 @@ impl BencodeParser {
 
     /// Runner element
     pub fn decode_bencode(&mut self) -> BenStruct {
-        self.decoded_bc = self.proc_bc();
+        self.decoded_bc = self.process_bencode();
         self.decoded_bc.clone()
     }
 
     /// recursive approach
-    fn proc_bc(&mut self) -> BenStruct {
+    fn process_bencode(&mut self) -> BenStruct {
         let tag = self.advance().expect("Couldn't extract tag");
         match tag {
             K_INT => self.consume_int(),
@@ -115,7 +131,7 @@ impl BencodeParser {
                 // while we have elements in the list
                 // extract next element, append into base_vec
                 loop {
-                    let elem = self.proc_bc();
+                    let elem = self.process_bencode();
                     match elem {
                         BenStruct::Null => break,
                         _ => base_vec.push(elem),
@@ -126,9 +142,7 @@ impl BencodeParser {
             }
             // Bytes - For parsing bytes
             number_delimiter if number_delimiter.is_ascii_digit() => {
-                println!("Working on a string");
                 let remaining_len_chars = self.consume_while(&mut |char| char != ':');
-                println!("{remaining_len_chars}");
                 let byte_len: u128 = format!("{number_delimiter}{remaining_len_chars}")
                     .parse()
                     .expect("Couldn't parse length of byte");
@@ -143,7 +157,7 @@ impl BencodeParser {
     /// the stack delimiter should work differently
     /// can't have it process just one level of depth
     /// a waste of resources actually
-    fn process_bencode(&mut self) -> BenStruct {
+    fn process_bencode_old(&mut self) -> BenStruct {
         let mut delimiter_stack: Vec<char> = Vec::new();
         let mut ben_struct_coded = BenStruct::Null;
 
@@ -154,53 +168,10 @@ impl BencodeParser {
         let mut is_byte = false;
 
         ben_struct_coded = match tag {
-            // Integer Parsing
-            K_INT => {
-                delimiter_stack.push('$');
-                eprintln!("int stack=>{:?}", delimiter_stack);
-                self.consume_int()
-            }
-
             // Dictionary parsing
             K_DICT => {
                 delimiter_stack.push('{');
                 BenStruct::Null
-            }
-            // List parsing
-            K_LIST => {
-                delimiter_stack.push('[');
-                let mut base_vec = Vec::new();
-                loop {
-                    println!("State=>{:#?}", delimiter_stack);
-
-                    let elem = self.process_bencode();
-                    if delimiter_stack.is_empty() {
-                        break BenStruct::List { data: base_vec };
-                    }
-
-                    match elem {
-                        BenStruct::Null => {
-                            delimiter_stack.pop();
-                            break BenStruct::List { data: base_vec };
-                        }
-                        elem => base_vec.push(elem),
-                    }
-                }
-            }
-            // Bytes - For parsing bytes
-            number_delimiter if number_delimiter.is_ascii_digit() => {
-                is_byte = true;
-                println!("Working on a string");
-                delimiter_stack.push('C');
-                let remaining_len_chars = self.consume_while(&mut |char| char != ':');
-                println!("{remaining_len_chars}");
-                let byte_len: u128 = format!("{number_delimiter}{remaining_len_chars}")
-                    .parse()
-                    .expect("Couldn't parse length of byte");
-                let parsed_byte = self.consume_bytes(byte_len);
-                // byte removes end itself
-                delimiter_stack.pop();
-                parsed_byte
             }
             _ => {
                 if tag == K_END {
@@ -243,9 +214,14 @@ impl BencodeParser {
         result
     }
 
+    fn check_end(&mut self) {
+        assert_eq!(self.advance().unwrap(), 'e')
+    }
+
     fn consume_int(&mut self) -> BenStruct {
         let raw_int = self.consume_while(&mut |char| char != 'e');
         let num: isize = raw_int.parse().expect("Couldn't parse integer");
+        self.check_end();
         BenStruct::Int { data: num }
     }
 
@@ -359,10 +335,10 @@ mod tests {
 
     #[test]
     fn should_parse_nested_lists() {
-        let mut bc_parser = BencodeParser::new_w_string(String::from("li42eli29ee4:spami-32ee"));
+        let mut bc_parser = BencodeParser::new_w_string(String::from("li39eli29ee4:spami-32ee"));
         let result = bc_parser.decode_bencode();
         let expected_result = vec![
-            BenStruct::Int { data: 42 },
+            BenStruct::Int { data: 39 },
             BenStruct::List {
                 data: vec![BenStruct::Int { data: 29 }],
             },
@@ -372,18 +348,12 @@ mod tests {
             },
             BenStruct::Int { data: -32 },
         ];
-        if let BenStruct::List { data } = result {
-            println!("{:#?}", data);
-            let match_count = data
-                .clone()
-                .iter()
-                .zip(expected_result.iter())
-                .filter(|&(r, e)| r == e)
-                .count();
-            assert_eq!(match_count, data.len())
-        } else {
-            panic!("Invalid data type decoded!")
-        }
+        assert_eq!(
+            result,
+            BenStruct::List {
+                data: expected_result
+            }
+        )
     }
 
     // Dicts
