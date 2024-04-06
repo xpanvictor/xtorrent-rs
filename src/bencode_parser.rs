@@ -88,6 +88,7 @@ const K_INT: char = 'i';
 const K_END: char = 'e';
 
 impl BencodeParser {
+    // # Panics
     pub fn new_w_file(filepath: &Path) -> BencodeParser {
         // let ben_source = fs::read_to_string(filepath)
         //     .unwrap_or_else(|_| panic!("Couldn't read bencode from {filepath}"));

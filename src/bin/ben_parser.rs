@@ -1,7 +1,10 @@
 //! This binary can be used to quickly run the bencode parser
 //! `cargo run --bin ben_parser -- --help`
+//!
 //! `--file-path <path to bencode file>` to use file
+//!
 //! `--ben-string <benstring>` where example <benstring> is i32e
+//!
 //! `--write-to <filepath>` path to write file to else to stdout
 
 use clap::{command, Parser};
@@ -21,6 +24,7 @@ struct Args {
     write_to: Option<PathBuf>,
 }
 
+// #Panics
 fn main() {
     println!("The bencode parser runtime");
 
