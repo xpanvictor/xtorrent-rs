@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::iter::Peekable;
+use std::path::Path;
 use std::vec::IntoIter;
 
 /// This is a bencode-parser
@@ -87,14 +88,14 @@ const K_INT: char = 'i';
 const K_END: char = 'e';
 
 impl BencodeParser {
-    pub fn new_w_file(filepath: &str) -> BencodeParser {
+    pub fn new_w_file(filepath: &Path) -> BencodeParser {
         // let ben_source = fs::read_to_string(filepath)
         //     .unwrap_or_else(|_| panic!("Couldn't read bencode from {filepath}"));
 
         BencodeParser {
             encoded_bc_source: Box::new(
                 fs::read_to_string(filepath)
-                    .unwrap_or_else(|_| panic!("Couldn't read bencode from {filepath}"))
+                    .unwrap_or_else(|_| panic!("Couldn't read bencode from {:?}", filepath))
                     .chars()
                     .collect::<Vec<char>>()
                     .into_iter()
