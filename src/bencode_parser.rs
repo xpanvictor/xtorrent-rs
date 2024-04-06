@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
 use std::iter::Peekable;
-use std::str::Chars;
 use std::vec::IntoIter;
 
 /// This is a bencode-parser
