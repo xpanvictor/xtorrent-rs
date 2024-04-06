@@ -66,7 +66,17 @@ impl PartialEq for BenStruct {
                     false
                 }
             }
-            _ => todo!("Not implemented yet, use an iter"),
+            BenStruct::Dict { data } => {
+                if let BenStruct::Dict {
+                    data: expected_dict,
+                } = other
+                {
+                    expected_dict == data
+                } else {
+                    false
+                }
+            }
+            _ => panic!("This data type doesn't exist on the benstruct"),
         }
     }
 }
@@ -132,6 +142,28 @@ impl BencodeParser {
 
                 BenStruct::List { data: base_vec }
             }
+            // Dict
+            K_DICT => {
+                let mut base_hash_map: HashMap<String, Box<BenStruct>> = HashMap::new();
+
+                // while k-v pairs in dict, extract and append
+                loop {
+                    let key = if let BenStruct::Byte { length: _, data } = self.process_bencode() {
+                        data
+                    } else {
+                        break;
+                    };
+
+                    let value = self.process_bencode();
+
+                    // insert key-value to HashMap
+                    base_hash_map.insert(key, Box::new(value));
+                }
+
+                BenStruct::Dict {
+                    data: base_hash_map,
+                }
+            }
             // Bytes - For parsing bytes
             number_delimiter if number_delimiter.is_ascii_digit() => {
                 let remaining_len_chars = self.consume_while(&mut |char| char != ':');
@@ -142,50 +174,6 @@ impl BencodeParser {
             }
 
             _ => BenStruct::Null,
-        }
-    }
-
-    /// debug
-    /// the stack delimiter should work differently
-    /// can't have it process just one level of depth
-    /// a waste of resources actually
-    fn process_bencode_old(&mut self) -> BenStruct {
-        let mut delimiter_stack: Vec<char> = Vec::new();
-        let mut ben_struct_coded = BenStruct::Null;
-
-        let tag = self.advance().expect("Couldn't extract tag");
-
-        // impl that uses recursive flow
-
-        let mut is_byte = false;
-
-        ben_struct_coded = match tag {
-            // Dictionary parsing
-            K_DICT => {
-                delimiter_stack.push('{');
-                BenStruct::Null
-            }
-            _ => {
-                if tag == K_END {
-                    return BenStruct::Null;
-                };
-                panic!("Unknown delimiter -> {}", tag)
-            }
-        };
-
-        if !is_byte {
-            if let Some(end_key) = self.advance() {
-                if end_key == K_END {
-                    delimiter_stack.pop();
-                };
-            }
-        }
-
-        if !delimiter_stack.is_empty() {
-            panic!("Invalid bencode, excess closing delimiters!")
-        } else {
-            println!("{:#?}", ben_struct_coded);
-            ben_struct_coded
         }
     }
 
@@ -229,10 +217,6 @@ impl BencodeParser {
             length: byte_len,
             data: raw_bytes,
         }
-    }
-
-    fn consume_dicts(&mut self) -> (String, BenStruct) {
-        (String::new(), BenStruct::Null)
     }
 }
 
@@ -350,6 +334,24 @@ mod tests {
     // Dicts
     #[test]
     fn should_parse_dicts() {
-        todo!()
+        let mut bc_parser = BencodeParser::new_w_string(String::from("d3:bar4:spam3:fooi45ee "));
+        let result = bc_parser.decode_bencode();
+        let expected_result = HashMap::from([
+            (
+                "bar".to_string(),
+                Box::new(BenStruct::Byte {
+                    length: 4,
+                    data: "spam".to_string(),
+                }),
+            ),
+            ("foo".to_string(), Box::new(BenStruct::Int { data: 45 })),
+        ]);
+
+        assert_eq!(
+            result,
+            BenStruct::Dict {
+                data: expected_result
+            }
+        )
     }
 }
