@@ -88,27 +88,32 @@ const K_INT: char = 'i';
 const K_END: char = 'e';
 
 impl BencodeParser {
+    pub fn parse_input(content: String) -> Peekable<IntoIter<char>> {
+        content
+            .chars()
+            .filter(|ch| !matches!(ch, '\n' | '\t'))
+            .collect::<Vec<char>>()
+            .into_iter()
+            .peekable()
+    }
+
     // # Panics
     pub fn new_w_file(filepath: &Path) -> BencodeParser {
         // let ben_source = fs::read_to_string(filepath)
         //     .unwrap_or_else(|_| panic!("Couldn't read bencode from {filepath}"));
 
         BencodeParser {
-            encoded_bc_source: Box::new(
+            encoded_bc_source: Box::new(Self::parse_input(
                 fs::read_to_string(filepath)
-                    .unwrap_or_else(|_| panic!("Couldn't read bencode from {:?}", filepath))
-                    .chars()
-                    .collect::<Vec<char>>()
-                    .into_iter()
-                    .peekable(),
-            ),
+                    .unwrap_or_else(|_| panic!("Couldn't read bencode from {:?}", filepath)),
+            )),
             decoded_bc: BenStruct::Null,
         }
     }
 
     pub fn new_w_string(bc: String) -> BencodeParser {
         BencodeParser {
-            encoded_bc_source: Box::new(bc.chars().collect::<Vec<char>>().into_iter().peekable()),
+            encoded_bc_source: Box::new(Self::parse_input(bc)),
             decoded_bc: BenStruct::Null,
         }
     }
@@ -354,5 +359,21 @@ mod tests {
                 data: expected_result
             }
         )
+    }
+
+    // New line, carriage return parsing
+    #[test]
+    fn should_support_new_lines() {
+        let mut bc_parser = BencodeParser::new_w_string(String::from("d\n3:foo\n3:bar\ne"));
+        let result = bc_parser.decode_bencode();
+        let expected_map = HashMap::from([(
+            "foo".to_string(),
+            Box::new(BenStruct::Byte {
+                length: 3,
+                data: "bar".to_string(),
+            }),
+        )]);
+        println!("{:#?}", result);
+        assert_eq!(result, BenStruct::Dict { data: expected_map });
     }
 }
