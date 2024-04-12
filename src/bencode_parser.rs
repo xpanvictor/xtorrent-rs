@@ -73,13 +73,13 @@ impl PartialEq for BenStruct {
 }
 
 impl BenStruct {
-    fn get_data(&self) -> Box<dyn std::any::Any> {
+    fn get_data(&self) -> Option<&dyn std::any::Any> {
         match self {
-            BenStruct::Int { data } => Box::new(data),
-            BenStruct::Byte { length, data } => Box::new(data),
-            BenStruct::Dict { data } => Box::new(data),
-            BenStruct::List { data } => Box::new(data),
-            BenStruct::Null => Box::new(0),
+            BenStruct::Int { data } => Some(&data),
+            BenStruct::Byte { length, data } => Some(&data),
+            BenStruct::Dict { data } => Some(&data),
+            BenStruct::List { data } => Some(&data),
+            BenStruct::Null => Some(&0),
         }
     }
 }
