@@ -6,7 +6,7 @@ use std::vec::IntoIter;
 
 /// This is a bencode-parser
 pub struct BencodeParser {
-    pub encoded_bc_source: Box<Peekable<IntoIter<char>>>,
+    pub encoded_bc_source: Box<Peekable<IntoIter<u8>>>,
     pub decoded_bc: BenStruct,
 }
 
@@ -17,7 +17,7 @@ pub struct BencodeParser {
 #[derive(Debug, Clone, Eq)]
 pub enum BenStruct {
     Int { data: isize },
-    Byte { length: u128, data: String },
+    Byte { length: u128, data: Vec<u8> },
     List { data: Vec<BenStruct> },
     // Since the key will always be strings
     Dict { data: HashMap<String, BenStruct> },
@@ -29,7 +29,7 @@ impl PartialEq for BenStruct {
         match self {
             BenStruct::Byte { data, .. } => {
                 if let BenStruct::Byte { data: word, .. } = other {
-                    data.as_str() == word.as_str()
+                    data == word
                 } else {
                     false
                 }
@@ -79,7 +79,7 @@ pub trait GetData {
 impl GetData for BenStruct {
     fn get_string(&self) -> String {
         if let BenStruct::Byte { length, data } = self {
-            data.to_string()
+            String::from_utf8(data.to_vec()).unwrap()
         } else {
             panic!("Not a string")
         }
@@ -112,12 +112,12 @@ const K_INT: char = 'i';
 const K_END: char = 'e';
 
 impl BencodeParser {
-    pub fn parse_input(content: Vec<u8>) -> Peekable<IntoIter<char>> {
+    pub fn parse_input(content: Vec<u8>) -> Peekable<IntoIter<u8>> {
         content
             .iter()
-            .map(|b| *b as char)
-            .filter(|ch| !matches!(ch, '\n' | '\t'))
-            .collect::<Vec<char>>()
+            .map(|b| *b as u8)
+            .filter(|ch| !matches!(*ch as char, '\n' | '\t'))
+            .collect::<Vec<u8>>()
             .into_iter()
             .peekable()
     }
@@ -139,7 +139,7 @@ impl BencodeParser {
         }
     }
 
-    fn advance(&mut self) -> Option<char> {
+    fn advance(&mut self) -> Option<u8> {
         self.encoded_bc_source.next()
     }
 
@@ -152,7 +152,7 @@ impl BencodeParser {
     /// recursive approach
     fn process_bencode(&mut self) -> BenStruct {
         let tag = self.advance().expect("Couldn't extract tag");
-        match tag {
+        match tag as char {
             K_INT => self.consume_int(),
             K_LIST => {
                 let mut base_vec = Vec::new();
@@ -184,7 +184,7 @@ impl BencodeParser {
                     let value = self.process_bencode();
 
                     // insert key-value to HashMap
-                    base_hash_map.insert(key, value);
+                    base_hash_map.insert(String::from_utf8(key).unwrap(), value);
                 }
 
                 BenStruct::Dict {
@@ -193,10 +193,14 @@ impl BencodeParser {
             }
             // Bytes - For parsing bytes
             number_delimiter if number_delimiter.is_ascii_digit() => {
-                let remaining_len_chars = self.consume_while(&mut |char| char != ':');
-                let byte_len: u128 = format!("{number_delimiter}{remaining_len_chars}")
-                    .parse()
-                    .expect("Couldn't parse length of byte");
+                let remaining_len_chars = self.consume_while(&mut |char| char != b':');
+                let byte_len: u128 = format!(
+                    "{}{}",
+                    number_delimiter as char,
+                    String::from_utf8(remaining_len_chars).unwrap()
+                )
+                .parse()
+                .expect("Couldn't parse length of byte");
                 self.consume_bytes(byte_len)
             }
 
@@ -204,11 +208,11 @@ impl BencodeParser {
         }
     }
 
-    fn consume_while<F>(&mut self, test: &mut F) -> String
+    fn consume_while<F>(&mut self, test: &mut F) -> Vec<u8>
     where
-        F: FnMut(char) -> bool,
+        F: FnMut(u8) -> bool,
     {
-        let mut result = String::new();
+        let mut result = Vec::new();
 
         loop {
             let x = self.encoded_bc_source.peek().to_owned();
@@ -222,12 +226,15 @@ impl BencodeParser {
     }
 
     fn check_end(&mut self) {
-        assert_eq!(self.advance().unwrap(), K_END)
+        assert_eq!(self.advance().unwrap() as char, K_END)
     }
 
     fn consume_int(&mut self) -> BenStruct {
-        let raw_int = self.consume_while(&mut |char| char != 'e');
-        let num: isize = raw_int.parse().expect("Couldn't parse integer");
+        let raw_int = self.consume_while(&mut |char| char != b'e');
+        let num: isize = String::from_utf8(raw_int)
+            .unwrap()
+            .parse()
+            .expect("Couldn't parse integer");
         self.check_end();
         BenStruct::Int { data: num }
     }
@@ -249,6 +256,8 @@ impl BencodeParser {
 
 #[cfg(test)]
 mod tests {
+    use std::str;
+
     use super::*;
 
     #[test]
@@ -303,7 +312,11 @@ mod tests {
                 data.clone().len(),
                 "Length of chars not same as passed len"
             );
-            assert_eq!(data.as_str(), expected_bytes, "Wrong chars decoded")
+            assert_eq!(
+                str::from_utf8(&data).unwrap(),
+                expected_bytes,
+                "Wrong chars decoded"
+            )
         } else {
             panic!("Invalid data type decoded!")
         }
@@ -318,7 +331,7 @@ mod tests {
             BenStruct::Int { data: 42 },
             BenStruct::Byte {
                 length: 4,
-                data: "spam".to_string(),
+                data: "spam".as_bytes().to_vec(),
             },
             BenStruct::Int { data: -32 },
         ];
@@ -347,7 +360,7 @@ mod tests {
             },
             BenStruct::Byte {
                 length: 4,
-                data: "spam".to_string(),
+                data: "spam".as_bytes().to_vec(),
             },
             BenStruct::Int { data: -32 },
         ];
@@ -369,7 +382,7 @@ mod tests {
                 "bar".to_string(),
                 BenStruct::Byte {
                     length: 4,
-                    data: "spam".to_string(),
+                    data: "spam".as_bytes().to_vec(),
                 },
             ),
             ("foo".to_string(), BenStruct::Int { data: 45 }),
@@ -392,7 +405,7 @@ mod tests {
             "foo".to_string(),
             BenStruct::Byte {
                 length: 3,
-                data: "bar".to_string(),
+                data: "bar".as_bytes().to_vec(),
             },
         )]);
         println!("{:#?}", result);
