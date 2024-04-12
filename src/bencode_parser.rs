@@ -139,6 +139,7 @@ impl BencodeParser {
         }
     }
 
+    // BUG: To implement an advancement that supports Vec<u8>
     fn advance(&mut self) -> Option<u8> {
         self.encoded_bc_source.next()
     }
