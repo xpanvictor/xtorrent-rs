@@ -5,3 +5,4 @@
 //! bencode_parser for library crate for ben_parser
 
 pub mod bencode_parser;
+pub mod torrent_spec;
