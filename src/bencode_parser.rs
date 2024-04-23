@@ -113,13 +113,7 @@ const K_END: char = 'e';
 
 impl BencodeParser {
     pub fn parse_input(content: Vec<u8>) -> Peekable<IntoIter<u8>> {
-        content
-            .iter()
-            .copied()
-            // .filter(|ch| !matches!(*ch as char, '\n' | '\t'))
-            .collect::<Vec<u8>>()
-            .into_iter()
-            .peekable()
+        content.into_iter().peekable()
     }
 
     // # Panics
@@ -157,6 +151,7 @@ impl BencodeParser {
         match tag as char {
             K_INT => self.consume_int(),
             K_LIST => {
+                self.consume_while(&mut |ch| matches!(ch as char, '\n' | '\t'));
                 let mut base_vec = Vec::new();
 
                 // while we have elements in the list
@@ -173,6 +168,8 @@ impl BencodeParser {
             }
             // Dict
             K_DICT => {
+                // remove new lines
+                self.consume_while(&mut |ch| matches!(ch as char, '\n' | '\t'));
                 let mut base_hash_map: HashMap<String, BenStruct> = HashMap::new();
 
                 // while k-v pairs in dict, extract and append
@@ -398,7 +395,7 @@ mod tests {
     // New line, carriage return parsing
     #[test]
     fn should_support_new_lines() {
-        let mut bc_parser = BencodeParser::new_w_string(String::from("d3:foo4:b\nare"));
+        let mut bc_parser = BencodeParser::new_w_string(String::from("d\n3:foo4:b\nare"));
         let result = bc_parser.decode_bencode();
         let expected_map = HashMap::from([(
             "foo".to_string(),
