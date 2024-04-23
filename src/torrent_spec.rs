@@ -75,8 +75,7 @@ mod torrent_struct_tests {
 
     #[test]
     fn should_extract_meta() {
-        let bcode =
-            BencodeParser::new_w_file(Path::new("archive/testtor.torrent")).decode_bencode();
+        let bcode = BencodeParser::new_w_file(Path::new("archive/debr.torrent")).decode_bencode();
         let extracted_meta = TorrentMeta::extract_from_bcode(bcode);
         println!("Crafted: {:#?}", extracted_meta);
     }

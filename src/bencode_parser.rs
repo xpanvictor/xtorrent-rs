@@ -78,7 +78,7 @@ pub trait GetData {
 }
 impl GetData for BenStruct {
     fn get_string(&self) -> String {
-        if let BenStruct::Byte { length, data } = self {
+        if let BenStruct::Byte { length: _, data } = self {
             String::from_utf8(data.to_vec()).unwrap()
         } else {
             panic!("Not a string")
@@ -115,8 +115,8 @@ impl BencodeParser {
     pub fn parse_input(content: Vec<u8>) -> Peekable<IntoIter<u8>> {
         content
             .iter()
-            .map(|b| *b as u8)
-            .filter(|ch| !matches!(*ch as char, '\n' | '\t'))
+            .copied()
+            // .filter(|ch| !matches!(*ch as char, '\n' | '\t'))
             .collect::<Vec<u8>>()
             .into_iter()
             .peekable()
@@ -153,6 +153,7 @@ impl BencodeParser {
     /// recursive approach
     fn process_bencode(&mut self) -> BenStruct {
         let tag = self.advance().expect("Couldn't extract tag");
+        println!("Tag{}", tag as char);
         match tag as char {
             K_INT => self.consume_int(),
             K_LIST => {
@@ -175,13 +176,11 @@ impl BencodeParser {
                 let mut base_hash_map: HashMap<String, BenStruct> = HashMap::new();
 
                 // while k-v pairs in dict, extract and append
-                loop {
-                    let key = if let BenStruct::Byte { length: _, data } = self.process_bencode() {
-                        data
-                    } else {
-                        break;
-                    };
-
+                while let BenStruct::Byte {
+                    length: _,
+                    data: key,
+                } = self.process_bencode()
+                {
                     let value = self.process_bencode();
 
                     // insert key-value to HashMap
@@ -196,8 +195,7 @@ impl BencodeParser {
             number_delimiter if number_delimiter.is_ascii_digit() => {
                 let remaining_len_chars = self.consume_while(&mut |char| char != b':');
                 let byte_len: u128 = format!(
-                    "{}{}",
-                    number_delimiter as char,
+                    "{number_delimiter}{}",
                     String::from_utf8(remaining_len_chars).unwrap()
                 )
                 .parse()
@@ -400,13 +398,13 @@ mod tests {
     // New line, carriage return parsing
     #[test]
     fn should_support_new_lines() {
-        let mut bc_parser = BencodeParser::new_w_string(String::from("d\n3:foo\n3:bar\ne"));
+        let mut bc_parser = BencodeParser::new_w_string(String::from("d3:foo4:b\nare"));
         let result = bc_parser.decode_bencode();
         let expected_map = HashMap::from([(
             "foo".to_string(),
             BenStruct::Byte {
                 length: 3,
-                data: "bar".as_bytes().to_vec(),
+                data: "b\nar".as_bytes().to_vec(),
             },
         )]);
         println!("{:#?}", result);
