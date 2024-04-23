@@ -11,7 +11,7 @@ pub struct TorrentInfo {
     pub file_length: TorrentFileType,
     pub piece_length: isize,
     pub name: Option<String>,
-    pub pieces: Vec<Vec<u8>>,
+    pub pieces: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -46,12 +46,14 @@ impl TorrentMeta {
                 TorrentFileType::Length(12)
             };
 
-            let pieces: Vec<Vec<u8>> =
-                if let BenStruct::Byte { data, length: _ } = info_struct.get("pieces").unwrap() {
-                    data.chunks(20).map(|chunk| chunk.to_vec()).collect()
-                } else {
-                    panic!("Pieces not found or invalid")
-                };
+            let pie = if let BenStruct::Byte { data, length } = info_struct.get("pieces").unwrap() {
+                let base_vec: Vec<Vec<u8>> =
+                    data.chunks(20).map(|chunk| chunk.to_vec()).collect();
+                base_vec
+            } else {
+                panic!("Pieces not found or invalid")
+            };
+            println!("{:?}", pie);
 
             // filling the info struct
             let torrent_info = TorrentInfo {
@@ -61,7 +63,7 @@ impl TorrentMeta {
                     .to_owned()
                     .get_isize(),
                 name: Some(info_struct.get("name").unwrap().get_string()),
-                pieces,
+                pieces: Vec::new(),
                 file_length,
             };
             TorrentMeta {

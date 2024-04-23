@@ -147,7 +147,6 @@ impl BencodeParser {
     /// recursive approach
     fn process_bencode(&mut self) -> BenStruct {
         let tag = self.advance().expect("Couldn't extract tag");
-        println!("Tag{}", tag as char);
         match tag as char {
             K_INT => self.consume_int(),
             K_LIST => {
