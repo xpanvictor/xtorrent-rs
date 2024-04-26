@@ -40,16 +40,19 @@ impl TorrentMeta {
                 _ => panic!("Invalid info dictionary in the torrent data"),
             };
             let is_folder = info_struct.get("files").is_some();
+
             let file_length = if is_folder {
+                // TODO: to handle folder structure
                 TorrentFileType::Files(vec![])
             } else {
                 TorrentFileType::Length(info_struct.get("length").unwrap().get_isize())
             };
 
-            // INFO: This part is excluded from final torrent info cos it's too big
             let pieces: Vec<Vec<u8>> =
-                if let BenStruct::Byte { data, length: _ } = info_struct.get("pieces").unwrap() {
-                    println!("Chunked {:?}", String::from_utf8(data.to_vec()));
+                if let BenStruct::Byte { data, length } = info_struct.get("pieces").unwrap() {
+                    if length % 20 != 0 {
+                        panic!("Invalid torrent specification passed")
+                    }
                     data.chunks(20).map(|chunk| chunk.to_vec()).collect()
                 } else {
                     panic!("Pieces not found or invalid")
@@ -63,7 +66,7 @@ impl TorrentMeta {
                     .to_owned()
                     .get_isize(),
                 name: Some(info_struct.get("name").unwrap().get_string()),
-                pieces: vec![],
+                pieces,
                 file_length,
             };
             TorrentMeta {
@@ -90,7 +93,7 @@ mod torrent_struct_tests {
     fn should_extract_meta_from_single_file_torrent() {
         let bcode = BencodeParser::new_w_file(Path::new("archive/debr.torrent")).decode_bencode();
         let extracted_meta = TorrentMeta::extract_from_bcode(bcode);
-        println!("Crafted: {:#?}", extracted_meta);
+        println!("Crafted: {:?}", extracted_meta);
     }
 
     #[test]
@@ -98,6 +101,6 @@ mod torrent_struct_tests {
         let bcode =
             BencodeParser::new_w_file(Path::new("archive/testtor.torrent")).decode_bencode();
         let extracted_meta = TorrentMeta::extract_from_bcode(bcode);
-        println!("Crafted: {:#?}", extracted_meta);
+        println!("Crafted: {:?}", extracted_meta);
     }
 }
