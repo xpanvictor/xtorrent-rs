@@ -42,8 +42,26 @@ impl TorrentMeta {
             let is_folder = info_struct.get("files").is_some();
 
             let file_length = if is_folder {
-                // TODO: to handle folder structure
-                TorrentFileType::Files(vec![])
+                let base_vec: Vec<FileFormat> =
+                    if let BenStruct::List { data } = info_struct.get("files").unwrap() {
+                        data.iter()
+                            .map(|file_struct| {
+                                if let BenStruct::Dict { data: file_element } = file_struct {
+                                    FileFormat {
+                                        length: file_element.get("length").unwrap().get_isize(),
+                                        // TODO: to handle path of files in folder
+                                        path: Vec::new(),
+                                    }
+                                } else {
+                                    panic!("Invalid torrent")
+                                }
+                            })
+                            .collect()
+                    } else {
+                        // Note: This is redundant, you checked if is a folder already
+                        panic!("Invalid torrent, files not found in a file project")
+                    };
+                TorrentFileType::Files(base_vec)
             } else {
                 TorrentFileType::Length(info_struct.get("length").unwrap().get_isize())
             };
