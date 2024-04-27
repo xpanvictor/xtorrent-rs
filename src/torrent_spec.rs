@@ -42,25 +42,35 @@ impl TorrentMeta {
             let is_folder = info_struct.get("files").is_some();
 
             let file_length = if is_folder {
-                let base_vec: Vec<FileFormat> =
-                    if let BenStruct::List { data } = info_struct.get("files").unwrap() {
-                        data.iter()
+                let base_vec: Vec<FileFormat> = if let BenStruct::List { data } =
+                    info_struct.get("files").unwrap()
+                {
+                    data.iter()
                             .map(|file_struct| {
                                 if let BenStruct::Dict { data: file_element } = file_struct {
                                     FileFormat {
                                         length: file_element.get("length").unwrap().get_isize(),
-                                        // TODO: to handle path of files in folder
-                                        path: Vec::new(),
+                                        path: if let BenStruct::List { data: path_list } =
+                                            file_element.get("path").unwrap()
+                                        {
+                                            if path_list.is_empty() {panic!("Invalid torrent, path: a zero length list is an error case")}
+                                            path_list
+                                                .iter()
+                                                .map(|path_element| path_element.get_string())
+                                                .collect()
+                                        } else {
+                                            panic!("Invalid torrent, no path in file format")
+                                        },
                                     }
                                 } else {
-                                    panic!("Invalid torrent")
+                                    panic!("Invalid torrent, files element is not a dict")
                                 }
                             })
                             .collect()
-                    } else {
-                        // Note: This is redundant, you checked if is a folder already
-                        panic!("Invalid torrent, files not found in a file project")
-                    };
+                } else {
+                    // Note: This is redundant, you checked if is a folder already
+                    panic!("Invalid torrent, files not found in a file project")
+                };
                 TorrentFileType::Files(base_vec)
             } else {
                 TorrentFileType::Length(info_struct.get("length").unwrap().get_isize())
