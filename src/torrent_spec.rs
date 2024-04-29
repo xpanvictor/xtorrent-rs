@@ -1,9 +1,10 @@
-use crate::bencode_parser::{BenStruct, GetData};
+use crate::bencode_parser::{encode_bencode, BenStruct, GetData};
 
 #[derive(Debug)]
 pub struct TorrentMeta {
     pub announce: String,
     pub info: TorrentInfo,
+    pub info_hash: Option<Vec<u8>>,
 }
 
 #[derive(Debug)]
@@ -34,8 +35,8 @@ impl TorrentMeta {
         } = raw_bcode
         {
             let announce_byte = torrent_hashmap.get("announce").unwrap().to_owned();
-            let info_struct = torrent_hashmap.get("info").unwrap().to_owned();
-            let info_struct = match info_struct {
+            let info_struct_bc = torrent_hashmap.get("info").unwrap().to_owned();
+            let info_struct = match &info_struct_bc {
                 BenStruct::Dict { data } => data,
                 _ => panic!("Invalid info dictionary in the torrent data"),
             };
@@ -100,6 +101,10 @@ impl TorrentMeta {
             TorrentMeta {
                 announce: announce_byte.get_string(),
                 info: torrent_info,
+                // Conversely that means clients must either reject invalid metainfo files or extract
+                // the substring directly. They must not perform a decode-encode roundtrip on invalid data.
+                // Note: I'm not performing key ordering
+                info_hash: Some(encode_bencode(&info_struct_bc)),
             }
         } else {
             panic!("Invalid bencode passed")

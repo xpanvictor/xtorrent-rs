@@ -1,8 +1,8 @@
 use std::collections::HashMap;
-use std::fs;
 use std::iter::Peekable;
 use std::path::Path;
 use std::vec::IntoIter;
+use std::{fs, u8};
 
 /// This is a bencode-parser
 pub struct BencodeParser {
@@ -133,7 +133,6 @@ impl BencodeParser {
         }
     }
 
-    // BUG: To implement an advancement that supports Vec<u8>
     fn advance(&mut self) -> Option<u8> {
         self.encoded_bc_source.next()
     }
@@ -246,6 +245,40 @@ impl BencodeParser {
             length: byte_len,
             data: raw_bytes,
         }
+    }
+}
+
+// Function for unparsing bencode from BenStruct
+pub fn encode_bencode(bc: &BenStruct) -> Vec<u8> {
+    // TODO: use keywords & refactor
+    match bc {
+        BenStruct::Int { data } => format!("i{data}e").into(),
+        BenStruct::Byte { length, data } => {
+            let mut len_serialized = format!("{}:", length).as_bytes().to_vec();
+            len_serialized.extend(data);
+            len_serialized
+        }
+        BenStruct::List { data } => {
+            let mut bc_list: Vec<u8> = Vec::new();
+            bc_list.extend("l".as_bytes().to_vec());
+            for bc_elem in data {
+                bc_list.append(&mut encode_bencode(bc_elem))
+            }
+            bc_list.extend("e".as_bytes().to_vec());
+            bc_list
+        }
+        BenStruct::Dict { data } => {
+            let mut bc_dict_serialized: Vec<u8> = Vec::new();
+            bc_dict_serialized.extend("d".as_bytes().to_vec());
+            for (string_key, bc_value) in data.iter() {
+                bc_dict_serialized.extend(format!("{}:", string_key.len()).as_bytes().to_vec());
+                bc_dict_serialized.extend(string_key.as_bytes().to_vec());
+                bc_dict_serialized.extend(encode_bencode(bc_value))
+            }
+            bc_dict_serialized.extend("e".as_bytes().to_vec());
+            bc_dict_serialized
+        }
+        _ => "".into(),
     }
 }
 
@@ -405,5 +438,58 @@ mod tests {
         )]);
         println!("{:#?}", result);
         assert_eq!(result, BenStruct::Dict { data: expected_map });
+    }
+
+    // Tests for serializer
+    #[test]
+    fn should_serialize_int() {
+        let bc = BenStruct::Int { data: 23 };
+        let result = encode_bencode(&bc);
+        let expected = "i23e".as_bytes().to_vec();
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn should_serialize_byte() {
+        let bc = BenStruct::Byte {
+            length: 4,
+            data: "spam".into(),
+        };
+        let result = encode_bencode(&bc);
+        let expected = "4:spam".as_bytes().to_vec();
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn should_serialize_list() {
+        let bc = BenStruct::List {
+            data: vec![
+                BenStruct::Int { data: 10 },
+                BenStruct::Byte {
+                    length: 3,
+                    data: "foo".into(),
+                },
+                BenStruct::Int { data: 5 },
+            ],
+        };
+        let result = encode_bencode(&bc);
+        let expected = "li10e3:fooi5ee".as_bytes().to_vec();
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn should_serialize_dict() {
+        let bc = BenStruct::Dict {
+            data: HashMap::from([(
+                "foo".to_string(),
+                BenStruct::Byte {
+                    length: 3,
+                    data: "bar".into(),
+                },
+            )]),
+        };
+        let result = encode_bencode(&bc);
+        let expected = "d3:foo3:bare".as_bytes().to_vec();
+        assert_eq!(expected, result);
     }
 }
