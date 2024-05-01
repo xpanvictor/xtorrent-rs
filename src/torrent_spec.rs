@@ -1,10 +1,11 @@
 use crate::bencode_parser::{encode_bencode, BenStruct, GetData};
+use sha1::{Digest, Sha1};
 
 #[derive(Debug)]
 pub struct TorrentMeta {
     pub announce: String,
     pub info: TorrentInfo,
-    pub info_hash: Option<Vec<u8>>,
+    pub info_hash: Option<[u8; 20]>,
 }
 
 #[derive(Debug)]
@@ -98,13 +99,15 @@ impl TorrentMeta {
                 pieces,
                 file_length,
             };
+            let mut hasher = Sha1::new();
+            hasher.update(encode_bencode(&info_struct_bc));
             TorrentMeta {
                 announce: announce_byte.get_string(),
                 info: torrent_info,
                 // Conversely that means clients must either reject invalid metainfo files or extract
                 // the substring directly. They must not perform a decode-encode roundtrip on invalid data.
-                // Note: I'm not performing key ordering
-                info_hash: Some(encode_bencode(&info_struct_bc)),
+                // NOTE: I'm not checking key ordering
+                info_hash: Some(hasher.finalize().into()),
             }
         } else {
             panic!("Invalid bencode passed")
@@ -125,8 +128,7 @@ mod torrent_struct_tests {
     #[test]
     fn should_extract_meta_from_single_file_torrent() {
         let bcode = BencodeParser::new_w_file(Path::new("archive/debr.torrent")).decode_bencode();
-        let extracted_meta = TorrentMeta::extract_from_bcode(bcode);
-        println!("Crafted: {:?}", extracted_meta);
+        TorrentMeta::extract_from_bcode(bcode);
     }
 
     #[test]
@@ -134,6 +136,6 @@ mod torrent_struct_tests {
         let bcode =
             BencodeParser::new_w_file(Path::new("archive/testtor.torrent")).decode_bencode();
         let extracted_meta = TorrentMeta::extract_from_bcode(bcode);
-        println!("Crafted: {:?}", extracted_meta);
+        println!("Crafted: {:?}", extracted_meta.info_hash);
     }
 }
