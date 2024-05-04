@@ -28,6 +28,7 @@ pub enum TorrentFileType {
     Files(Vec<FileFormat>),
 }
 
+// TODO: method to split out params for tracker
 impl TorrentMeta {
     // # panics
     pub fn extract_from_bcode(raw_bcode: BenStruct) -> TorrentMeta {
@@ -70,7 +71,7 @@ impl TorrentMeta {
                             })
                             .collect()
                 } else {
-                    // Note: This is redundant, you checked if is a folder already
+                    // Note: This is redundant, you checked if it's a folder already
                     panic!("Invalid torrent, files not found in a file project")
                 };
                 TorrentFileType::Files(base_vec)

@@ -12,6 +12,7 @@ repository = "https://github.com/xpanvictor/xtorrent-rs"
 [dependencies]
 clap = { version = "4.5.4", features = ["derive"] }
 sha1 = { version = "0.10.6" }
+reqwest = { version = "0.12.4", features = ["json"] }
 
 [[bin]]
 name = "bencode-parser"
