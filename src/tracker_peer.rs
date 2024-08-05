@@ -14,6 +14,14 @@ impl Peers {
     }
 
     fn generate_params_for_peers(t_info: &TorrentMeta) -> HashMap<String, String> {
-        todo!()
+        HashMap::from([
+            ("info_hash".to_string(), t_info.info_hash.unwrap()),
+            ("peer_id".to_string(), "".to_string()),
+            ("port".to_string(), "".to_string()),
+            ("uploaded".to_string(), "".to_string()),
+            ("downloaded".to_string(), "".to_string()),
+            ("left".to_string(), "".to_string()),
+            ("event".to_string(), "".to_string()),
+        ])
     }
 }
